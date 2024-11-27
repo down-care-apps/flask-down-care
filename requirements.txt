@@ -1,0 +1,9 @@
+Flask==2.3.2
+gunicorn==21.2.0
+opencv-python-headless
+firebase_admin
+joblib
+cmake
+dlib
+# cmake==3.31.0.1
+# dlib==19.22.0
