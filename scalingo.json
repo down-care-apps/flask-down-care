@@ -1,0 +1,9 @@
+{
+    "buildpacks": [],
+    "deploy": {
+      "docker": {
+        "image": "flask-cloud-run"
+      }
+    }
+  }
+  

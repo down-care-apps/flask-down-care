@@ -1,17 +1,32 @@
-# Gunakan base image Python
-FROM python:3.9-slim
+# Use an official Python runtime as a base image
+FROM python:3.10-slim
 
-# Set working directory
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy semua file ke container
-COPY . .
+# Install system dependencies for building Python packages (including CMake)
+RUN apt-get update && apt-get install -y \
+    cmake \
+    build-essential \
+    libopenblas-dev \
+    liblapack-dev \
+    libboost-all-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
+# Copy the requirements file into the container
+COPY requirements.txt .
+
+# Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port 8080
+# Copy the rest of the application code
+COPY . .
+
+# Set the environment variable for Flask
+ENV FLASK_APP=app.py
+
+# Expose the port Flask will run on
 EXPOSE 8080
 
-# Perintah untuk menjalankan aplikasi
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+# Command to run the application using gunicorn
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "app:app"]
