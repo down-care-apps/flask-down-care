@@ -62,7 +62,7 @@ def upload():
             return render_template('index.html', error="The face is not frontal. Please try another picture.")
 
         # Step 3: Crop the face with padding
-        cropped_image = crop_face(img, landmarks, padding_percentage=0.1)
+        cropped_image = crop_face(img, landmarks, padding_percentage=0.05)
 
         # Step 4: Reapply detection on the cropped image
         cropped_landmarks = get_landmarks(cropped_image)
