@@ -3,7 +3,6 @@ import numpy as np
 import joblib
 import dlib
 from skimage.feature import local_binary_pattern
-from matplotlib import pyplot as plt
 
 # Load the trained model and scaler
 model_data = joblib.load('trained_model.pkl')
@@ -20,33 +19,24 @@ POINTS = 8 * RADIUS
 METHOD = 'uniform'
 PATCH_SIZE = 16
 
-# List of specific landmarks to extract patches from
-landmark_indices = [
-    36, 39, 42, 45, 27, 30, 33, 31, 35, 51, 48, 54, 57, 68
-]
-
-# Define landmark pairs for geometric features
+# Landmarks and pairs
+landmark_indices = [36, 39, 42, 45, 27, 30, 33, 31, 35, 51, 48, 54, 57, 68]
 pairs = [
-    (36, 39), (39, 42), (42, 45), (27, 30), (30, 33),
-    (33, 31), (33, 35), (30, 31), (30, 35), (33, 51),
-    (51, 48), (51, 54), (51, 57), (48, 57), (54, 57),
-    (39, 68), (42, 68)
+    (36, 39), (39, 42), (42, 45), (27, 30), (30, 33), (33, 31),
+    (33, 35), (30, 31), (30, 35), (33, 51), (51, 48), (51, 54),
+    (51, 57), (48, 57), (54, 57), (39, 68), (42, 68)
 ]
 
-# Function to check if the face is frontal
 def is_frontal_face(landmarks):
     left_eye = np.mean(np.array(landmarks[36:42]), axis=0)
     right_eye = np.mean(np.array(landmarks[42:48]), axis=0)
     nose_tip = np.array(landmarks[30])
     eye_distance = np.linalg.norm(left_eye - right_eye)
-    nose_to_left_eye = np.linalg.norm(nose_tip - left_eye)
-    nose_to_right_eye = np.linalg.norm(nose_tip - right_eye)
-    symmetry_threshold = 0.15 * eye_distance
-    return abs(nose_to_left_eye - nose_to_right_eye) < symmetry_threshold
+    symmetry_threshold = 0.3 * eye_distance
+    return abs(np.linalg.norm(nose_tip - left_eye) - np.linalg.norm(nose_tip - right_eye)) < symmetry_threshold
 
-# Function to extract landmarks
-def get_landmarks(image_input):
-    gray = cv2.cvtColor(image_input, cv2.COLOR_BGR2GRAY)
+def get_landmarks(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     faces = detector(gray)
     for face in faces:
         landmarks = predictor(gray, face)
@@ -58,7 +48,23 @@ def get_landmarks(image_input):
             return points
     return None
 
-# Function to extract patches
+def crop_face(image, landmarks, padding_percentage=0.1):
+    min_x = min(landmarks, key=lambda x: x[0])[0]
+    max_x = max(landmarks, key=lambda x: x[0])[0]
+    min_y = min(landmarks, key=lambda x: x[1])[1]
+    max_y = max(landmarks, key=lambda x: x[1])[1]
+    width, height = max_x - min_x, max_y - min_y
+    max_dim = max(width, height)
+    padding = int(max_dim * padding_percentage)
+
+    size = max_dim + 2 * padding
+    cx, cy = (min_x + max_x) // 2, (min_y + max_y) // 2
+    x1, x2 = max(cx - size // 2, 0), min(cx + size // 2, image.shape[1])
+    y1, y2 = max(cy - size // 2, 0), min(cy + size // 2, image.shape[0])
+
+    return cv2.resize(image[y1:y2, x1:x2], (300, 300))
+
+# Function to extract patches around specific landmarks
 def extract_patches(image, landmarks, indices, patch_size=PATCH_SIZE):
     patches = []
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -73,7 +79,7 @@ def extract_patches(image, landmarks, indices, patch_size=PATCH_SIZE):
             patches.append(patch)
     return patches
 
-# Function to extract LBP features
+# Function to extract LBP features from patches
 def extract_lbp_from_patches(patches, radius=RADIUS, points=POINTS, method=METHOD):
     lbp_features = []
     for patch in patches:
@@ -84,7 +90,7 @@ def extract_lbp_from_patches(patches, radius=RADIUS, points=POINTS, method=METHO
         lbp_features.extend(hist)
     return lbp_features
 
-# Function to extract geometric features
+# Function to extract geometric features from specific landmark pairs
 def extract_geometric_features(landmarks, pairs):
     geom_features = []
     for i, j in pairs:
@@ -94,23 +100,19 @@ def extract_geometric_features(landmarks, pairs):
         geom_features.append(distance)
     return geom_features
 
-# Function to extract combined features (LBP + Geometric)
 def get_combined_features(image, pairs):
     landmarks = get_landmarks(image)
     if landmarks:
         patches = extract_patches(image, landmarks, landmark_indices)
         lbp_features = extract_lbp_from_patches(patches)
         geom_features = extract_geometric_features(landmarks, pairs)
-        combined_features = lbp_features + geom_features
-        return combined_features
+        return lbp_features + geom_features
     return None
 
-# Function to plot landmarks and save the plot
 def plot_landmarks(image, landmarks, save_path):
     for x, y in landmarks:
         cv2.circle(image, (x, y), 2, (0, 255, 0), -1)
     for (i, j) in pairs:
-        x1, y1 = landmarks[i]
-        x2, y2 = landmarks[j]
+        x1, y1, x2, y2 = *landmarks[i], *landmarks[j]
         cv2.line(image, (x1, y1), (x2, y2), (255, 0, 0), 1)
     cv2.imwrite(save_path, image)

@@ -18,8 +18,9 @@
         <h2>Prediction: {{ label }}</h2>
         <p>Confidence - Healthy: {{ confidence_healthy }}</p>
         <p>Confidence - Down Syndrome: {{ confidence_ds }}</p>
-        <h3>Uploaded Image</h3>
-        <img src="{{ image_path }}" alt="Uploaded Image" style="max-width: 300px;">
+        <p>Inference Time: {{ inference_time }}</p>
+        <h3>Cropped Image</h3>
+        <img src="{{ image_path }}" alt="Cropped Image" style="max-width: 300px;">
         <h3>Landmark Plot</h3>
         <img src="{{ plot_path }}" alt="Landmark Plot" style="max-width: 300px;">
     {% endif %}
