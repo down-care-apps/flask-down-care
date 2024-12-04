@@ -5,7 +5,7 @@ import dlib
 from skimage.feature import local_binary_pattern
 
 # Load the trained model and scaler
-model_data = joblib.load('trained_model.pkl')
+model_data = joblib.load('trained_model_v2.pkl')
 model = model_data['model']
 scaler = model_data['scaler']
 
@@ -15,10 +15,10 @@ predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
 
 
 # Constants for LBP
-RADIUS = 2
+RADIUS = 1
 POINTS = 8 * RADIUS
 METHOD = 'uniform'
-PATCH_SIZE = 16
+PATCH_SIZE = 32
 
 landmark_indices = [36, 39, 42, 45, 27, 30, 33, 31, 35, 51, 48, 54, 57, 68]
 pairs = [
@@ -47,27 +47,74 @@ def is_frontal_face(landmarks):
     eye_distance = np.linalg.norm(left_eye - right_eye)
     nose_to_left_eye = np.linalg.norm(nose_tip - left_eye)
     nose_to_right_eye = np.linalg.norm(nose_tip - right_eye)
-    symmetry_threshold = 0.3 * eye_distance
+    symmetry_threshold = 0.35 * eye_distance
     return abs(nose_to_left_eye - nose_to_right_eye) < symmetry_threshold
 
-def crop_face(image, landmarks, padding_percentage=0.1):
+def align_face(image, landmarks):
+    # Convert landmarks to a numpy array
+    landmarks = np.array(landmarks, dtype=np.float32)
+
+    # Calculate the center of the left and right eyes
+    left_eye_center = np.mean(landmarks[36:42], axis=0)
+    right_eye_center = np.mean(landmarks[42:48], axis=0)
+
+    # Calculate the angle between the eye centers
+    delta_y = right_eye_center[1] - left_eye_center[1]
+    delta_x = right_eye_center[0] - left_eye_center[0]
+    angle = np.degrees(np.arctan2(delta_y, delta_x))
+
+    # Get the center of the face for rotation
+    face_center = np.mean(landmarks, axis=0)
+    face_center = tuple(map(float, face_center))  # Ensure it's a tuple of floats
+
+    # Get rotation matrix
+    rotation_matrix = cv2.getRotationMatrix2D(face_center, angle, 1.0)
+
+    # Perform the rotation
+    rotated_image = cv2.warpAffine(image, rotation_matrix, (image.shape[1], image.shape[0]), flags=cv2.INTER_LINEAR)
+
+    # Adjust landmarks
+    ones = np.ones((landmarks.shape[0], 1))
+    landmarks_homogeneous = np.hstack([landmarks, ones])
+    rotated_landmarks = np.dot(rotation_matrix, landmarks_homogeneous.T).T
+
+    return rotated_image, rotated_landmarks
+
+def crop_face(image, landmarks, padding_percentage=0.09):
     min_x = min(landmarks, key=lambda x: x[0])[0]
     max_x = max(landmarks, key=lambda x: x[0])[0]
     min_y = min(landmarks, key=lambda x: x[1])[1]
     max_y = max(landmarks, key=lambda x: x[1])[1]
+
     width = max_x - min_x
     height = max_y - min_y
     max_dimension = max(width, height)
+
     padding = int(max_dimension * padding_percentage)
-    size = max_dimension + 2 * padding
     center_x = (min_x + max_x) // 2
     center_y = (min_y + max_y) // 2
-    new_min_x = max(center_x - size // 2, 0)
-    new_max_x = min(center_x + size // 2, image.shape[1])
-    new_min_y = max(center_y - size // 2, 0)
-    new_max_y = min(center_y + size // 2, image.shape[0])
+
+    available_left = min_x
+    available_right = image.shape[1] - max_x
+    available_top = min_y
+    available_bottom = image.shape[0] - max_y
+
+    if available_left >= padding and available_right >= padding and available_top >= padding and available_bottom >= padding:
+        actual_padding = padding
+    else:
+        actual_padding = min(available_left, available_right, available_top, available_bottom)
+
+    size = max_dimension + actual_padding * 2
+
+    new_min_x = max(int(center_x - size // 2), 0)
+    new_max_x = min(int(center_x + size // 2), image.shape[1])
+    new_min_y = max(int(center_y - size // 2), 0)
+    new_max_y = min(int(center_y + size // 2), image.shape[0])
+
     cropped_image = image[new_min_y:new_max_y, new_min_x:new_max_x]
-    return cv2.resize(cropped_image, (300, 300))
+    cropped_image_resized = cv2.resize(cropped_image, (300, 300))
+
+    return cropped_image_resized
 
 def extract_patches(image, landmarks, indices, patch_size=PATCH_SIZE):
     patches = []

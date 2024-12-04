@@ -13,6 +13,7 @@ from script import (
     plot_landmarks,
     is_frontal_face,
     crop_face,
+    align_face,
     extract_lbp_from_patches,
     extract_geometric_features,
     get_separated_features,
@@ -61,18 +62,24 @@ def upload():
         if not is_frontal_face(landmarks):
             return render_template('index.html', error="The face is not frontal. Please try another picture.")
 
-        # Step 3: Crop the face with padding
-        cropped_image = crop_face(img, landmarks, padding_percentage=0.05)
+        # Step 3: Align the face based on landmarks
+        try:
+            aligned_image, aligned_landmarks = align_face(img, landmarks)
+        except ValueError as e:
+            return render_template('index.html', error=f"Error during face alignment: {str(e)}")
 
-        # Step 4: Reapply detection on the cropped image
+        # Step 4: Crop the aligned face
+        cropped_image = crop_face(aligned_image, aligned_landmarks, padding_percentage=0.09)
+
+        # Step 5: Reapply detection on the cropped image
         cropped_landmarks = get_landmarks(cropped_image)
         if not cropped_landmarks:
             return render_template('index.html', error="Unable to detect landmarks on the cropped image.")
 
-        # Step 5: Extract LBP and geometric features
+        # Step 6: Extract LBP and geometric features
         lbp_features, geom_features = get_separated_features(cropped_image, pairs)
 
-        # Step 6: Concatenate features with labels for display
+        # Step 7: Concatenate features with labels for display
         combined_features_with_labels = []
         lbp_array = np.hstack(list(lbp_features.values()))
         geom_array = np.array(list(geom_features.values()))
@@ -85,7 +92,7 @@ def upload():
         for pair, distance in zip(geom_features.keys(), geom_array):
             combined_features_with_labels.append(f"{pair}: {distance}")
 
-        # Step 7: Transform features and make prediction
+        # Step 8: Transform features and make prediction
         start_time = time.time()
         combined_features = np.hstack([lbp_array, geom_array])
         combined_features = np.nan_to_num(combined_features)
