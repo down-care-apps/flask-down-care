@@ -2,10 +2,11 @@ import os
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 import cv2
+import time
 import numpy as np
 from firebase_admin import credentials, initialize_app, storage
 import datetime
-from script import get_combined_features, model, scaler, get_landmarks, pairs, plot_landmarks
+from script import get_combined_features, model, scaler, get_landmarks, pairs, plot_landmarks, is_frontal_face, crop_face
 import requests
 from urllib.parse import urlparse
 
@@ -16,7 +17,7 @@ firebase_app = initialize_app(cred, {
 })
 
 def download_image_from_url(url):
-    """
+    """ 
     Download an image from a URL and save it locally
     
     Args:
@@ -116,40 +117,54 @@ def analyze():
 
         # Process the image
         img = cv2.imread(filepath)
-        img = cv2.resize(img, (300, 300))
-        features = get_combined_features(img, pairs)
 
+        landmarks = get_landmarks(img)
+        if not landmarks:
+            return jsonify({'error': 'No frontal face detected in the image'}), 400
+
+        if not is_frontal_face(landmarks):
+            return jsonify({'error': 'The face is not frontal. Please try another picture.'}), 400
+        
+        cropped_image = crop_face(img, landmarks, padding_percentage=0.05)
+        cropped_landmarks = get_landmarks(cropped_image)
+        if not cropped_landmarks:
+            return jsonify({'error': 'Unable to detect landmarks on the cropped image'}), 400
+
+        start_time = time.time()
+        features = get_combined_features(cropped_image, pairs)
         if features:
             features = np.nan_to_num(features)
             features = scaler.transform([features])
             probabilities = model.predict_proba(features)[0]
             prediction = model.predict(features)[0]
+            end_time = time.time()
+
+            inference_time = end_time - start_time
+
             label = "Down Syndrome" if prediction == 1 else "Healthy"
 
             # Extract landmarks
-            landmarks = get_landmarks(img)
-            if landmarks:
-                plot_path = os.path.join(app.config['UPLOAD_FOLDER'], f"landmarks_{os.path.basename(filepath)}")
-                plot_landmarks(img, landmarks, plot_path)
-                
-                # Upload landmarks plot to Firebase
-                firebase_url = upload_to_firebase(plot_path, f"landmarks_{os.path.basename(filepath)}")
-                
-                # Clean up local files
-                os.remove(filepath)
-                os.remove(plot_path)
-                
-                return jsonify({
-                    'label': label,
-                    'confidence': {
-                        'healthy': f"{probabilities[0]:.2f}",
-                        'down_syndrome': f"{probabilities[1]:.2f}"
-                    },
-                    'message': 'Analysis successful',
-                    'landmarks_url': firebase_url
-                }), 200
-            else:
-                return jsonify({'error': 'No frontal face detected in the image'}), 400
+        
+            plot_path = os.path.join(app.config['UPLOAD_FOLDER'], f"landmarks_{os.path.basename(filepath)}")
+            plot_landmarks(cropped_image.copy(), cropped_landmarks, plot_path)
+            
+            # Upload landmarks plot to Firebase
+            firebase_url = upload_to_firebase(plot_path, f"landmarks_{os.path.basename(filepath)}")
+            
+            # Clean up local files
+            os.remove(filepath)
+            os.remove(plot_path)
+            
+            return jsonify({
+                'label': label,
+                'confidence': {
+                    'healthy': f"{probabilities[0]:.2f}",
+                    'down_syndrome': f"{probabilities[1]:.2f}"
+                },
+                'inference_time': f"{inference_time:.4f} seconds",
+                'message': 'Analysis successful',
+                'landmarks_url': firebase_url
+            }), 200
         else:
             return jsonify({'error': 'No features could be extracted from the image'}), 400
             
