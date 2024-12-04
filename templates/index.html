@@ -4,25 +4,162 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Face Analysis</title>
+    <style>
+        /* Global Styles */
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #eaf2fb;
+            color: #2c3e50;
+        }
+
+        h1, h2, h3 {
+            color: #1a73e8;
+        }
+
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 2.5rem;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #ffffff;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        /* Form Styling */
+        form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        input[type="file"] {
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #d1d9e6;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 400px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="file"]:hover {
+            border-color: #1a73e8;
+            outline: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #1a73e8;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #0c5bdc;
+        }
+
+        /* Text and Image Display */
+        p {
+            margin: 10px 0;
+            line-height: 1.5;
+            font-size: 1rem;
+        }
+
+        img {
+            display: block;
+            margin: 15px auto;
+            border: 2px solid #d1d9e6;
+            border-radius: 8px;
+            max-width: 100%;
+        }
+
+        img:hover {
+            border-color: #1a73e8;
+        }
+
+        /* Preformatted Text Blocks */
+        pre {
+            background: #f4faff;
+            border: 1px solid #d1d9e6;
+            padding: 15px;
+            border-radius: 8px;
+            white-space: pre-wrap; /* Wrap long text */
+            word-wrap: break-word; /* Break long words */
+            font-size: 0.95rem;
+            color: #2c3e50;
+        }
+
+        .features {
+            margin: 30px 0;
+        }
+
+        .features h3 {
+            margin-top: 30px;
+            border-bottom: 2px solid #1a73e8;
+            padding-bottom: 5px;
+        }
+
+        .error {
+            color: #d93025;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Upload an Image for Analysis</h1>
-    <form action="/upload" method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept="image/*">
-        <button type="submit">Upload</button>
-    </form>
-    {% if error %}
-        <p style="color: red;">{{ error }}</p>
-    {% endif %}
-    {% if label %}
-        <h2>Prediction: {{ label }}</h2>
-        <p>Confidence - Healthy: {{ confidence_healthy }}</p>
-        <p>Confidence - Down Syndrome: {{ confidence_ds }}</p>
-        <p>Inference Time: {{ inference_time }}</p>
-        <h3>Cropped Image</h3>
-        <img src="{{ image_path }}" alt="Cropped Image" style="max-width: 300px;">
-        <h3>Landmark Plot</h3>
-        <img src="{{ plot_path }}" alt="Landmark Plot" style="max-width: 300px;">
-    {% endif %}
+    <div class="container">
+        <h1>DownCare Flask Lesgoooooooo</h1>
+        <form action="/upload" method="post" enctype="multipart/form-data">
+            <input type="file" name="file" accept="image/*">
+            <button type="submit">Upload</button>
+        </form>
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+        {% if label %}
+            <h2>Prediction: {{ label }}</h2>
+            <p><strong>Confidence - Healthy:</strong> {{ confidence_healthy }}</p>
+            <p><strong>Confidence - Down Syndrome:</strong> {{ confidence_ds }}</p>
+            <p><strong>Inference Time:</strong> {{ inference_time }}</p>
+            <h3>Cropped Image</h3>
+            <img src="{{ image_path }}" alt="Cropped Image">
+            <h3>Landmark Plot</h3>
+            <img src="{{ plot_path }}" alt="Landmark Plot">
+            <div class="features">
+                <h3>LBP Features</h3>
+                <pre>
+{% for key, value in lbp_features.items() %}
+{{ key }}: {{ value }}
+{% endfor %}
+                </pre>
+                <h3>Geometric Features</h3>
+                <pre>
+{% for key, value in geom_features.items() %}
+{{ key }}: {{ value }}
+{% endfor %}
+                </pre>
+                <h3>Combined Features</h3>
+                <pre>
+{% for feature in combined_features %}
+{{ feature }}
+{% endfor %}
+                </pre>
+            </div>
+        {% endif %}
+    </div>
 </body>
 </html>
