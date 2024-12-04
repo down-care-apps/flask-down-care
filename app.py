@@ -6,7 +6,7 @@ import time
 import numpy as np
 from firebase_admin import credentials, initialize_app, storage
 import datetime
-from script import get_combined_features, model, scaler, get_landmarks, pairs, plot_landmarks, is_frontal_face, crop_face
+from script import model, scaler, get_landmarks, pairs, plot_landmarks, is_frontal_face, crop_face, align_face,extract_lbp_from_patches, extract_geometric_features, get_separated_features
 import requests
 from urllib.parse import urlparse
 
@@ -125,49 +125,69 @@ def analyze():
         if not is_frontal_face(landmarks):
             return jsonify({'error': 'The face is not frontal. Please try another picture.'}), 400
         
-        cropped_image = crop_face(img, landmarks, padding_percentage=0.05)
+        try:
+            aligned_image, aligned_landmarks = align_face(img, landmarks)
+        except ValueError as e:
+            return jsonify({'error': f'Error during face alignment: {str(e)}'}), 400
+
+        cropped_image = crop_face(aligned_image, aligned_landmarks, padding_percentage=0.05)
+        
         cropped_landmarks = get_landmarks(cropped_image)
         if not cropped_landmarks:
             return jsonify({'error': 'Unable to detect landmarks on the cropped image'}), 400
 
+        lbp_features, geom_features = get_separated_features(cropped_image, pairs)
+
+        combined_features_with_labels = []
+        lbp_array = np.hstack(list(lbp_features.values()))
+        geom_array = np.array(list(geom_features.values()))
+
+        # Add LBP features with labels
+        for landmark, lbp in zip(lbp_features.keys(), lbp_array):
+            combined_features_with_labels.append(f"{landmark}: {lbp}")
+
+        # Add geometric features with labels
+        for pair, distance in zip(geom_features.keys(), geom_array):
+            combined_features_with_labels.append(f"{pair}: {distance}")
+
+
         start_time = time.time()
-        features = get_combined_features(cropped_image, pairs)
-        if features:
-            features = np.nan_to_num(features)
-            features = scaler.transform([features])
-            probabilities = model.predict_proba(features)[0]
-            prediction = model.predict(features)[0]
-            end_time = time.time()
+        combined_features = np.hstack([lbp_array, geom_array])
+        combined_features = np.nan_to_num(combined_features)
+        transformed_features = scaler.transform([combined_features])
+        probabilities = model.predict_proba(transformed_features)[0]
+        prediction = model.predict(transformed_features)[0]
+        end_time = time.time()
 
-            inference_time = end_time - start_time
 
-            label = "Down Syndrome" if prediction == 1 else "Healthy"
+        inference_time = end_time - start_time
+        label = "Down Syndrome" if prediction == 1 else "Healthy"
 
-            # Extract landmarks
+        # Extract landmarks
+        plot_path = os.path.join(app.config['UPLOAD_FOLDER'], f"landmarks_{os.path.basename(filepath)}")
+        plot_landmarks(cropped_image.copy(), cropped_landmarks, plot_path)
         
-            plot_path = os.path.join(app.config['UPLOAD_FOLDER'], f"landmarks_{os.path.basename(filepath)}")
-            plot_landmarks(cropped_image.copy(), cropped_landmarks, plot_path)
-            
-            # Upload landmarks plot to Firebase
-            firebase_url = upload_to_firebase(plot_path, f"landmarks_{os.path.basename(filepath)}")
-            
-            # Clean up local files
-            os.remove(filepath)
-            os.remove(plot_path)
-            
-            return jsonify({
-                'label': label,
-                'confidence': {
-                    'healthy': f"{probabilities[0]:.2f}",
-                    'down_syndrome': f"{probabilities[1]:.2f}"
-                },
-                'inference_time': f"{inference_time:.4f} seconds",
-                'message': 'Analysis successful',
-                'landmarks_url': firebase_url
-            }), 200
-        else:
-            return jsonify({'error': 'No features could be extracted from the image'}), 400
-            
+        # Upload landmarks plot to Firebase
+        firebase_url = upload_to_firebase(plot_path, f"landmarks_{os.path.basename(filepath)}")
+        
+        # Clean up local files
+        os.remove(filepath)
+        os.remove(plot_path)
+        
+        return jsonify({
+            'label': label,
+            'confidence': {
+                'healthy': f"{probabilities[0]:.2f}",
+                'down_syndrome': f"{probabilities[1]:.2f}"
+            },
+            'lbp_features': lbp_features,
+            'geom_features': geom_features,
+            'combined_features': combined_features_with_labels,
+            'inference_time': f"{inference_time:.4f} seconds",
+            'message': 'Analysis successful',
+            'landmarks_url': firebase_url
+        }), 200
+    
     except Exception as e:
         return jsonify({'error': f'An error occurred: {str(e)}'}), 500
     finally:
